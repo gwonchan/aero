@@ -1,0 +1,99 @@
+% Form the parameter matrix for the equation of motion of a cantilevered beam
+% with a PZT actuator
+clear;clc
+
+M1=4.5;
+ainf = 340;
+Xbeta=0.01; Xalpha= 0.25;
+Ralpha= sqrt(0.36); Rbeta=sqrt(0.00324);
+Wh=60; Walpha=60;Wbeta=30;
+theta =Wh/Walpha; theta1=Wbeta/Walpha;
+b=1.5;c=3.0;
+mu = 30;
+rho=1.225;
+kappa = 1.4;
+lambda = 1.102;
+X0=-0.15;  X1=0.75;
+zetah = 0; zetaalpha = 0; zetabeta = 0;
+d=(X1-X0);
+e=0;
+epsilon=10; % aerodynamical non-linearity.
+sigma=1;   % Structural non-liniearity.
+delta=0;
+U=(M1*340)/(b*Walpha);
+
+
+%=== Consider the non-linearities. ======================================
+% M matrix, K matrix
+% aerodynamic loads f, f_dot
+
+%====== F difine  =======================================================
+%states = [xi ; alpha ; beta]
+% F = f*x + f'*x' = [La;Mea;Hb]
+
+f=(-1*lambda/(mu*M1))*[0        1                        (-1/2)*(-2+X1);
+                       0      (1-X0)              (1/4)*(2-X1)*(2-2*X0+X1);
+                       0    (1/4)*(-2+X1)^2         (1/4)*(-2+X1)^2];
+
+f_dot=(-1*lambda/(mu*M1))*[1                      1-X0            (1/4)*(-2+X1)^2;
+                         (1-X0)              (1/3)*(4-6*X0+3*X0^2)          (1/12)*(-2+X1)^2*(4-3*X0+X1);
+                         (1/4)*(-2+X1)^2   (1/12)*(-2+X1)^2*(4-3*X0+X1)     -((-1/3)+(1/6)*X1)*(-2+X1)^2];
+
+%====== Mass & Damping & Stiffness Matrix    ============================
+
+M = [ 1        Xalpha     Xbeta;
+    Xalpha    Ralpha^2    Rbeta^2+d*Xbeta;
+    Xbeta    Rbeta^2+d*Xbeta   Rbeta^2] ;
+
+C = (2/U)*[zetah*theta    0            0 ;
+            0    zetaalpha*Ralpha^2    0 ;
+            0    0    zetabeta*Rbeta^2*theta1];
+
+K = (1/U^2)*[theta^2     0            0;
+             0        Ralpha^2        0;
+             0          0     Rbeta^2*theta^2];
+%======================================================================
+
+% ★★★★ non-lin of K ★★★★
+Knon1=(1/U^2)*[0     0       0;
+               0  epsilon    0;
+               0     0       0];
+Knon=[    zeros(3)          eye(3);
+        inv(M)*(-Knon1)    zeros(3)];
+
+% ★★★ non-lin of Aerodynamic Loads ★★★
+ALnon1=inv(M)*[0 1               0;
+               0 (1-X0)          0;
+               0 (1/4)*(-2+X1)^2 0]; 
+ALnon=(-1*lambda/(mu*M1))*sigma*(1/12)*M1^2*lambda^2*(1+kappa)*[0;0;0;ALnon1(:,2)];
+
+%=== B control input matrix. ==========================================
+B1=inv(M)*[0;0;1];
+B=[zeros(3,1);B1];
+
+%=== Governing Equation. ==================================================
+A=[    zeros(3)             eye(3);
+      inv(M)*(f-K)      inv(M)*(f_dot-C)];
+
+%C = [1 0 0 0 0 0];
+%C = [1 0 0 0 0 0;
+%     zeros(5,6)];
+%C = eye(6);
+C=[1 0 0 0 0 0;
+   0 0.001 0 0 0 0;
+   0 0 0.001 0 0 0;
+   0 0 0 0.001 0 0;
+   0 0 0 0 0.001 0;
+   0 0 0 0 0 0.001];
+Q=[K zeros(3,3);
+   zeros(3,3) M];
+% regular form
+[A11,A12,A21,A22,B2,Tr]=regfor(A,B);
+% canonical form for output feedback design
+%[Af,Bf,Cf,Tcan,r]=outfor(A,B,C); -->comrobs.m에 포함되어 있음. 생략가능
+% sliding fuction by quadratic min.
+
+% special form of A tilde
+[S,M]=lqcf(A,B,Q);
+%[Hhat,Dhat,S,L,P,Lam,T]=comrobs_mod(A,B,C);
+
